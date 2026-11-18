@@ -2,6 +2,8 @@
 
 A run timer and a live system monitor for ComfyUI, as two gizmos inside Nuke. See how long every ComfyUI job takes, and watch CPU, RAM, GPU, VRAM and temperature without leaving Nuke. No ComfyUI custom nodes and no extra Python packages are needed.
 
+Made by **Omar El Sharkawy** ([@OmarSharkawyy](https://github.com/OmarSharkawyy)).
+
 | Gizmo | What it does |
 | --- | --- |
 | **Pixo Timer** | Times any job ComfyUI runs, including jobs started from the ComfyUI web page or other tools. |
@@ -99,4 +101,4 @@ These need a real Nuke session: the *Read from* drop-down syntax, the meter pane
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT © 2026 Omar El Sharkawy. You may use, change and share Pixo freely, as long as the copyright notice and the [LICENSE](LICENSE) stay with every copy.
