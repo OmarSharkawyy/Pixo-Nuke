@@ -337,8 +337,8 @@ class Estimator:
             return text, f"~{_clock(live)} sampler"
         if left <= 0:
             return " · ".join(part for part in ("Running longer than before", step, basis) if part), "over"
-        ends = time.strftime("%H:%M", time.localtime(time.time() + left))
-        text = " · ".join(part for part in (f"~{_clock(left)} left (about {ends})", step, basis) if part)
+        text = " · ".join(part for part in (f"~{_clock(left)} left", f"done at {finish_time(left)}", step, basis)
+                          if part)
         return text, f"~{_clock(left)} left"
 
     def _totals(self, key, field):
@@ -400,10 +400,16 @@ class Estimator:
         bar = job.bars[-1]
         after = total_seconds - (start + length)  # later samplers, decoding and saving
         if not bar["done"]:
-            if live is None:
-                live = length * speed * (1 - bar.get("step", 0) / bar["total"])
+            if live is None:  # no step finished yet: count down from when the sampler was seen starting
+                live = max(length * speed * (1 - bar.get("step", 0) / bar["total"]) - (now - bar["seen"]), 0.0)
             return live + after * speed
         return after * speed - (now - (bar["start"] + bar["length"]))
+
+
+def finish_time(seconds_left, now=None):
+    """The clock time a job should finish, such as 6:36 AM."""
+    moment = time.localtime((time.time() if now is None else now) + seconds_left)
+    return time.strftime("%I:%M %p", moment).lstrip("0")
 
 
 def _clock(seconds):

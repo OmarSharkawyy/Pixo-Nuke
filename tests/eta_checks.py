@@ -80,6 +80,10 @@ def eta_test(eta, tracker_module):
     assert eta.parse_bar("\r 10%| 1/10 [00:01<00:09]\r 20%| 2/10 [00:02<00:08]") == (2, 10, 2, 8)
     for text in ("", None, "Requested to load LTXAV", "5/3 [00:01<00:02]", "0/0 [00:00<00:00]"):
         assert eta.parse_bar(text) is None, text
+    import time as clock_module
+    morning = clock_module.mktime((2026, 11, 19, 6, 0, 0, 0, 0, -1))
+    assert eta.finish_time(36 * 60, now=morning) == "6:36 AM", eta.finish_time(36 * 60, now=morning)
+    assert eta.finish_time(7 * 3600, now=morning) == "1:00 PM"
 
     # The same workflow means the same nodes, models and sizes; prompts, seeds and inputs are ignored.
     base = eta.signature(workflow())
@@ -223,8 +227,10 @@ def eta_test(eta, tracker_module):
         comfy.bar(0, 3, "00:00", "?")
         tracker.poll(comfy.fetch)
         view = tracker.view()
-        assert "sampler 2 of 2 · step 0/3" in view.estimate and "left (about" in view.estimate, view
+        assert "sampler 2 of 2 · step 0/3" in view.estimate and " left · done at " in view.estimate, view
         assert abs(left_seconds(view.estimate) - 50) <= 3, view.estimate
+        clock.now += 20  # still on step 0: the time left must keep counting down
+        assert abs(left_seconds(tracker.view().estimate) - 30) <= 3, tracker.view().estimate
         comfy.running = []
         tracker.poll(comfy.fetch)
 

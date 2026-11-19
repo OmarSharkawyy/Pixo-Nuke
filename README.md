@@ -67,7 +67,7 @@ How the timing works:
 
 ### Estimate
 
-**Estimate** shows how long the running job has left, for example `~03:10 left (about 14:42) · sampler 1 of 2 · step 4/8 · from 3 earlier runs`, and the node's label shows `04:55 · ~03:10 left`. It works for any workflow, whoever started it.
+**Estimate** shows how long the running job has left, for example `~03:10 left · done at 2:42 PM · sampler 1 of 2 · step 4/8 · from 3 earlier runs`, where *done at* is the clock time the job should finish, and the node's label shows `04:55 · ~03:10 left`. It works for any workflow, whoever started it.
 
 **The Timer learns from every render.** Each run that finishes while it is watching is remembered: how long the whole job took, and when each sampler started and how long it ran. The more you render a workflow, the better its estimates get. Pixo also reads recent runs from ComfyUI's own history, so workflows you rendered before installing Pixo help too.
 
