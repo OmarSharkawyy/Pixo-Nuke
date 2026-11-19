@@ -11,7 +11,7 @@ Made by **Omar El Sharkawy** ([@OmarSharkawyy](https://github.com/OmarSharkawyy)
 
 ## Install
 
-1. Download this repository (**Code → Download ZIP**) and extract it. Put the extracted `Pixo-Nuke-main` folder inside your `.nuke` folder:
+1. Download `Pixo-Nuke.zip` from the [latest release](https://github.com/OmarSharkawyy/Pixo-Nuke/releases/latest), or the repository from **Code → Download ZIP**, and extract it. Both give a folder named `Pixo-Nuke-main`. Put it inside your `.nuke` folder:
    - Windows: `%USERPROFILE%\.nuke`
    - macOS and Linux: `~/.nuke`
 2. Open or create `init.py` in that `.nuke` folder and add these lines, keeping any existing startup code:
