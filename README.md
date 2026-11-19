@@ -130,7 +130,7 @@ They use a fake clock, local HTTP servers standing in for ComfyUI, scripts stand
 
 The automated tests run without Nuke. Everything they cannot reach was checked inside Nuke 16.0v5 on Windows 11 with an NVIDIA GPU: both gizmos load, the *Read from* drop-down offers Auto, Local and Server, a display update leaves the script unmodified, the CPU, RAM, GPU, VRAM and temperature readings come back from this computer, and the meter panel draws and updates inside Nuke's Properties panel while monitoring.
 
-The Timer's **Estimate** was checked against the real log and history of a ComfyUI running LTX-2.5 workflows, and the gizmo loads with the new field in Nuke 16.0v5. Watching it count down during a render in the Nuke panel is still to be checked by eye.
+The Timer's **Estimate** was checked during real LTX-2.5 renders in Nuke 16.0v5: it estimates the running sampler on a first run, the whole job once the workflow has run before, and it counts down in the panel and on the node.
 
 ## License
 
