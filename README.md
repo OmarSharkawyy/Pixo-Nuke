@@ -67,23 +67,28 @@ How the timing works:
 
 ### Estimate
 
-**Estimate** shows how long the running job has left, for example `~03:10 left (about 14:42) · sampler 1 of 2 · step 4/8 · from 3 earlier runs`, and the node's label shows `04:55 · ~03:10 left`. It works for any workflow, whoever started it, from two sources:
+**Estimate** shows how long the running job has left, for example `~03:10 left (about 14:42) · sampler 1 of 2 · step 4/8 · from 3 earlier runs`, and the node's label shows `04:55 · ~03:10 left`. It works for any workflow, whoever started it.
 
-- **The sampler steps.** Every sampler prints its progress to ComfyUI's console, such as `4/8 [00:40<00:40]`. Pixo reads that log, so it knows the current step and how long that sampler has left.
-- **Earlier runs of the same workflow.** Pixo remembers how long each finished run took and when each sampler started, and it also reads recent runs from ComfyUI's history. A run counts as the same workflow when it has the same nodes, models and size settings (width, height, frames, steps); a new prompt, seed or input clip does not change that.
+**The Timer learns from every render.** Each run that finishes while it is watching is remembered: how long the whole job took, and when each sampler started and how long it ran. The more you render a workflow, the better its estimates get. Pixo also reads recent runs from ComfyUI's own history, so workflows you rendered before installing Pixo help too.
+
+It combines that with what is happening right now:
+
+- **The sampler steps.** Every sampler prints its progress to ComfyUI's console, such as `4/8 [00:40<00:40]`. Pixo reads that log, so it knows the current step and how fast the steps are going on this run.
+- **Earlier runs of the same workflow.** A run counts as the same workflow when it has the same nodes and models. A new prompt, seed or input clip does not change that, and neither does a new resolution: runs at another size are scaled to this one.
 
 How accurate it is:
 
 | Situation | Estimate |
 | --- | --- |
-| The same workflow, at the same size, has finished while Pixo was watching | Whole job, adjusted to the speed of the steps running now. The most accurate case. |
-| It finished before, but only ComfyUI's history has it | Whole job, from the middle of the earlier times. |
+| The same workflow at the same size has finished while Pixo was watching | Whole job, adjusted to the speed of the steps running now. The most accurate case. |
+| It finished while watching, but at another size | Whole job, scaled by how fast the steps of this run actually go. Close once the first steps are done. |
+| Only ComfyUI's history has it | Whole job, from the middle of the earlier times. At another size it is scaled by the pixel count and marked `rough`. |
 | First run of this workflow | Only the sampler that is running: `~00:40 left in this sampler`. The next run is estimated in full. |
 | The job was already running when you pressed Start Watching | No estimate for that job, since its start is unknown. |
 
-The first job after ComfyUI starts also loads the models, so it runs longer than later ones. Watching the steps corrects for that while the job runs. When a job outlasts every earlier run, the field says `Running longer than before`.
+The first job after ComfyUI starts also loads the models, so it runs longer than later ones; watching the steps corrects for that while the job runs. Clip length is not part of the workflow, so a longer clip is caught by the step speed too. When a job outlasts every earlier run, the field says `Running longer than before`.
 
-Finished runs are kept in `pixo_timings.json` in your `.nuke` folder (the last 5 runs of up to 200 workflows). Delete it to start fresh, or set the `PIXO_TIMINGS_FILE` environment variable to keep it elsewhere. The sampler steps come from ComfyUI's `/internal/logs/raw` route; on a ComfyUI without it, the estimate uses earlier runs only.
+Finished runs are kept in `pixo_timings.json` in your `.nuke` folder (the last 5 runs of each workflow and size, for up to 200 of them). Delete it to start fresh, or set the `PIXO_TIMINGS_FILE` environment variable to keep it elsewhere. The sampler steps come from ComfyUI's `/internal/logs/raw` route; on a ComfyUI without it, the estimate uses earlier runs only.
 
 ## Pixo Pulse
 

@@ -7,13 +7,18 @@ Two sources are used, and neither needs the job to have been started from Nuke:
   (ComfyUI sends its websocket progress only to the client that queued the job, so the log is the
   one place where any watcher can see it.)
 - How long the same workflow took before: ComfyUI's /history, and runs watched here, which also
-  remember when each sampler started and how long it took. "The same workflow" means the same nodes,
-  models and size settings (width, height, frames, steps, ...); prompts and seeds are ignored.
+  remember when each sampler started and how long it took.
+
+"The same workflow" means the same nodes and models; prompts, seeds and input files are ignored.
+Runs at the same size give the closest estimate. Runs at another size are scaled: first by the
+pixel count, then, as soon as steps are running, by how fast those steps actually go, which also
+covers clip length and GPU load.
 
 Pure Python with no Nuke dependency, so it can be tested on its own.
 """
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -29,10 +34,11 @@ SIZE_INPUTS = {"width", "height", "length", "frames", "num_frames", "frame_count
                "max_frames", "frame_load_cap", "batch_size", "steps", "scale_by", "upscale_by",
                "megapixels", "resolution"}
 MODEL_SUFFIXES = (".safetensors", ".ckpt", ".pt", ".pth", ".gguf", ".bin", ".sft", ".onnx")
-KEEP_RUNS = 5           # runs remembered per workflow
-KEEP_WORKFLOWS = 200    # workflows remembered in the timings file
+KEEP_RUNS = 5           # runs remembered per workflow and size
+KEEP_WORKFLOWS = 200    # workflow sizes remembered in the timings file
 HISTORY_ITEMS = 64      # recent /history entries read when a job starts
-SPEED_LIMITS = (0.5, 2.0)
+SAME_SIZE_SPEED = (0.5, 2.0)    # how far live step speed may move an estimate from a same-size run
+OTHER_SIZE_SPEED = (0.05, 20.0)
 _FILE_LOCK = threading.Lock()
 
 
@@ -61,11 +67,11 @@ def parse_bar(text):
     return step, total, elapsed, remaining
 
 
-def signature(prompt):
-    """A short id for a workflow: its node types, model files and size settings.
+def signature(prompt, sizes=True):
+    """A short id for a workflow: its node types and model files, plus its size settings if sizes.
 
-    Prompts, seeds and input file names are left out, so re-running a shot with new text or a new
-    take still counts as the same workflow, while a new resolution or frame count does not.
+    Prompts, seeds and input file names are always left out, so re-running a shot with new text or
+    a new take counts as the same workflow. With sizes=False, a new resolution does too.
     """
     if not isinstance(prompt, dict) or not prompt:
         return None
@@ -77,7 +83,7 @@ def signature(prompt):
         for name, value in sorted((step.get("inputs") or {}).items()):
             if isinstance(value, bool):
                 continue
-            if isinstance(value, (int, float)) and name in SIZE_INPUTS:
+            if sizes and isinstance(value, (int, float)) and name in SIZE_INPUTS:
                 kept.append([name, value])
             elif isinstance(value, str) and value.lower().endswith(MODEL_SUFFIXES):
                 kept.append([name, value])
@@ -86,6 +92,23 @@ def signature(prompt):
         return None
     parts.sort(key=lambda part: json.dumps(part, sort_keys=True))
     return hashlib.sha1(json.dumps(parts, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+
+
+def work(prompt):
+    """Pixels per frame times batch: the size that the time of a run grows with, or None."""
+    if not isinstance(prompt, dict):
+        return None
+    pixels, batch = 0, 1
+    for step in prompt.values():
+        inputs = (step.get("inputs") or {}) if isinstance(step, dict) else {}
+        width, height = inputs.get("width"), inputs.get("height")
+        if all(isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+               for value in (width, height)):
+            pixels = max(pixels, width * height)
+        count = inputs.get("batch_size")
+        if isinstance(count, int) and not isinstance(count, bool) and count > 0:
+            batch = max(batch, count)
+    return pixels * batch if pixels else None
 
 
 def history_seconds(entry):
@@ -103,6 +126,10 @@ def history_seconds(entry):
     return (end - start) / 1000
 
 
+def _plural(count, word):
+    return f"{count} {word}{'s' if count != 1 else ''}"
+
+
 class TimingStore:
     """Runs of each workflow, kept in a small JSON file so estimates survive a Nuke restart."""
 
@@ -116,10 +143,21 @@ class TimingStore:
         except (OSError, ValueError):
             return {}
 
+    @staticmethod
+    def _valid(run):
+        return isinstance(run, dict) and isinstance(run.get("seconds"), (int, float))
+
     def runs(self, sig):
         record = self.load().get(sig) or {}
-        return [run for run in record.get("runs") or () if isinstance(run, dict)
-                and isinstance(run.get("seconds"), (int, float))]
+        return [run for run in record.get("runs") or () if self._valid(run)]
+
+    def runs_of_shape(self, shape):
+        """Runs of the same workflow at any size."""
+        found = []
+        for record in self.load().values():
+            if isinstance(record, dict):
+                found += [run for run in record.get("runs") or () if self._valid(run) and run.get("shape") == shape]
+        return found
 
     def add(self, sig, run):
         with _FILE_LOCK:
@@ -143,9 +181,10 @@ class TimingStore:
 
 
 class Job:
-    def __init__(self, job_id, sig, started, partial):
-        self.id, self.sig, self.started, self.partial = job_id, sig, started, partial
-        self.bars = []          # dicts: total, step, start, seen, remaining, done
+    def __init__(self, job_id, prompt, started, partial):
+        self.id, self.started, self.partial = job_id, started, partial
+        self.sig, self.shape, self.work = signature(prompt), signature(prompt, sizes=False), work(prompt)
+        self.bars = []          # dicts: total, step, start, seen, remaining, elapsed, done, length
         self.cursor = None      # timestamp of the newest log line already read
         self.primed = False     # the log lines from before this job have been skipped
 
@@ -158,11 +197,11 @@ class Estimator:
         self.logs_ok = True     # False once the server shows it has no log route
         self.job = None
         self.ended = {}         # job id -> Job, waiting for its /history result
-        self.past = {}          # signature -> {job id: seconds} from ComfyUI's /history
+        self.past = []          # finished runs from ComfyUI's /history: id, sig, shape, work, seconds
 
     # --- following the job -------------------------------------------------------------------
     def begin(self, fetch, job_id, prompt, partial, now):
-        self.job = Job(job_id, signature(prompt), now, partial)
+        self.job = Job(job_id, prompt, now, partial)
         self._read_history(fetch)
         self._read_logs(fetch, now, skip=True)  # older lines belong to earlier jobs
 
@@ -181,22 +220,24 @@ class Estimator:
             return
         bars = [[bar["total"], round(bar["start"] - job.started, 2), round(bar["length"], 2)]
                 for bar in job.bars if bar.get("done")] if self.logs_ok else None
-        self.store.add(job.sig, {"id": str(job_id), "seconds": round(seconds, 2), "bars": bars})
+        self.store.add(job.sig, {"id": str(job_id), "seconds": round(seconds, 2), "bars": bars,
+                                 "shape": job.shape, "work": job.work})
 
     def _read_history(self, fetch):
         try:
             history = fetch(f"/history?max_items={HISTORY_ITEMS}") or {}
         except Exception:  # Optional: without it the estimate starts from runs watched here.
             return
-        past = {}
+        past = []
         for job_id, entry in history.items() if isinstance(history, dict) else ():
             if not isinstance(entry, dict):
                 continue
             prompt = entry.get("prompt")
-            sig = signature(prompt[2]) if isinstance(prompt, (list, tuple)) and len(prompt) > 2 else None
+            prompt = prompt[2] if isinstance(prompt, (list, tuple)) and len(prompt) > 2 else None
             seconds = history_seconds(entry)
-            if sig is not None and seconds is not None:
-                past.setdefault(sig, {})[str(job_id)] = seconds
+            if prompt is not None and seconds is not None:
+                past.append({"id": str(job_id), "sig": signature(prompt), "shape": signature(prompt, sizes=False),
+                             "work": work(prompt), "seconds": seconds})
         self.past = past
 
     def _read_logs(self, fetch, now, skip=False):
@@ -250,31 +291,47 @@ class Estimator:
         elapsed = now - job.started
         bar = job.bars[-1] if job.bars else None
         live = None if bar is None or bar["done"] else self._bar_left(bar, now)
-        runs = self.store.runs(job.sig) if job.sig else []
-        known = dict(self.past.get(job.sig, {}))
-        known.update({run.get("id") or f"watched-{index}": run["seconds"] for index, run in enumerate(runs)})
-        totals = list(known.values())
-        left, basis = None, ""
-        profile = None if job.partial else self._profile(runs, job)
-        if profile is not None:
-            left = self._from_profile(profile, job, now, live)
-            basis = f"from {len(totals)} earlier run{'s' if len(totals) != 1 else ''}"
-        elif totals and not job.partial:  # a job already running when watching began has no known start
-            left = statistics.median(totals) - elapsed
-            if live is not None:
+        same = self._totals(job.sig, "sig")
+        other = {key: run for key, run in self._totals(job.shape, "shape").items() if key not in same}
+        left, basis, profile = None, "", None
+        if not job.partial:  # a job already running when watching began has no known start
+            stored = self.store.runs(job.sig) if job.sig else []
+            profile, exact = self._profile(stored, job), True
+            if profile is None and job.shape:
+                profile, exact = self._profile(self.store.runs_of_shape(job.shape), job), False
+            if profile is not None:
+                left = self._from_profile(profile, job, now, live, exact)
+                basis = (f"from {_plural(len(same), 'earlier run')}" if exact
+                         else f"scaled from {_plural(len(other) or 1, 'run')} at another size")
+            elif same:
+                left = statistics.median(run["seconds"] for run in same.values()) - elapsed
+                basis = f"from {_plural(len(same), 'earlier run')}"
+            elif other and job.work:
+                # Part of a run does not grow with size (loading, decoding), so only the runs
+                # closest in size are scaled: those within twice or half the pixels, else the nearest.
+                sized = sorted((run for run in other.values() if run.get("work")),
+                               key=lambda run: abs(math.log(run["work"] / job.work)))
+                near = ([run for run in sized if abs(math.log(run["work"] / job.work)) <= math.log(2)]
+                        or [run for run in sized if sized and run["work"] == sized[0]["work"]])
+                scaled = [run["seconds"] * job.work / run["work"] for run in near]
+                if scaled:
+                    left = statistics.median(scaled) - elapsed
+                    basis = f"rough: scaled from {_plural(len(scaled), 'run')} at another size"
+            if left is not None and live is not None:
                 left = max(left, live)
-            basis = f"from {len(totals)} earlier run{'s' if len(totals) != 1 else ''}"
         step = ""
         if bar is not None:
-            count = len(profile) if profile is not None else None
+            count = len(profile["bars"]) if profile is not None else None
             sampler = f"sampler {len(job.bars)}" + (f" of {count}" if count and count >= len(job.bars) else "")
             step = f"{sampler} · step {bar['step']}/{bar['total']}"
         if left is None:
             if live is None:
                 if job.partial:
                     reason = "No estimate: the job was already running when watching began"
+                elif bar is not None:
+                    reason = "Starting this sampler"
                 else:
-                    reason = "No estimate yet: this workflow has not finished here before"
+                    reason = "No estimate yet: first run of this workflow"
                 return " · ".join(part for part in (reason, step) if part), ""
             text = f"~{_clock(live)} left in this sampler · {step}"
             return text, f"~{_clock(live)} sampler"
@@ -283,6 +340,16 @@ class Estimator:
         ends = time.strftime("%H:%M", time.localtime(time.time() + left))
         text = " · ".join(part for part in (f"~{_clock(left)} left (about {ends})", step, basis) if part)
         return text, f"~{_clock(left)} left"
+
+    def _totals(self, key, field):
+        """Finished runs matching this job by signature or shape, from history and runs watched here."""
+        if not key:
+            return {}
+        found = {run["id"]: run for run in self.past if run.get(field) == key}
+        stored = self.store.runs(key) if field == "sig" else self.store.runs_of_shape(key)
+        for index, run in enumerate(stored):
+            found[run.get("id") or f"watched-{index}"] = run
+        return found
 
     @staticmethod
     def _bar_left(bar, now):
@@ -295,33 +362,47 @@ class Estimator:
 
     @staticmethod
     def _profile(runs, job):
-        """The bars of the median remembered run, when its samplers match this job's so far."""
+        """The samplers of the median remembered run, when they match this job's samplers so far."""
         timed = [run for run in runs if isinstance(run.get("bars"), list) and run["bars"]]
         if not timed:
             return None
         timed.sort(key=lambda run: run["seconds"])
         run = timed[len(timed) // 2]
         bars = [bar for bar in run["bars"] if isinstance(bar, list) and len(bar) == 3]
-        if len(job.bars) > len(bars) or any(seen["total"] != bars[index][0]
-                                            for index, seen in enumerate(job.bars)):
+        if not bars or len(job.bars) > len(bars) or any(seen["total"] != bars[index][0]
+                                                        for index, seen in enumerate(job.bars)):
             return None
-        return [(total, start, length, run["seconds"]) for total, start, length in bars]
+        return {"bars": bars, "seconds": run["seconds"], "work": run.get("work")}
 
     @staticmethod
-    def _from_profile(profile, job, now, live):
-        total_seconds = profile[0][3]
+    def _from_profile(profile, job, now, live, exact):
+        bars, total_seconds = profile["bars"], profile["seconds"]
+        size = 1.0 if exact or not (job.work and profile.get("work")) else job.work / profile["work"]
+        # How fast this job runs compared with the remembered one: from the newest sampler with a
+        # finished step, so a sampler that is just starting still has a speed.
+        speed = None
+        for index in range(len(job.bars) - 1, -1, -1):
+            seen = job.bars[index]
+            step_time = (seen["length"] / seen["total"] if seen["done"]
+                         else seen["elapsed"] / seen["step"] if seen.get("step") and seen.get("elapsed") else None)
+            known_total, _, known_length = bars[index]
+            if step_time and known_length:
+                speed = step_time / (known_length / known_total)
+                break
+        if speed is None:
+            speed = size
+        low, high = SAME_SIZE_SPEED if exact else OTHER_SIZE_SPEED
+        speed = min(max(speed, low), high)
         if not job.bars:
-            return total_seconds - (now - job.started)
+            return total_seconds * speed - (now - job.started)
         index = len(job.bars) - 1
-        _, start, length, _ = profile[index]
+        _, start, length = bars[index]
         bar = job.bars[-1]
         after = total_seconds - (start + length)  # later samplers, decoding and saving
-        speed = 1.0
-        if bar.get("elapsed") and bar.get("step") and length:
-            speed = (bar["elapsed"] / bar["step"]) / (length / profile[index][0])
-            speed = min(max(speed, SPEED_LIMITS[0]), SPEED_LIMITS[1])
         if not bar["done"]:
-            return (live if live is not None else length * speed) + after * speed
+            if live is None:
+                live = length * speed * (1 - bar.get("step", 0) / bar["total"])
+            return live + after * speed
         return after * speed - (now - (bar["start"] + bar["length"]))
 
 
