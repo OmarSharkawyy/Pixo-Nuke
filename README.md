@@ -11,15 +11,17 @@ Made by **Omar El Sharkawy** ([@OmarSharkawyy](https://github.com/OmarSharkawyy)
 
 ## Install
 
-1. Download this repository (**Code → Download ZIP**) or clone it, and put the `Pixo-Nuke` folder inside your `.nuke` folder:
+1. Download this repository (**Code → Download ZIP**) and extract it. Put the extracted `Pixo-Nuke-main` folder inside your `.nuke` folder:
    - Windows: `%USERPROFILE%\.nuke`
    - macOS and Linux: `~/.nuke`
-2. Open or create `init.py` in that `.nuke` folder and add these lines, keeping any existing startup code. Use the folder's real name; a downloaded ZIP is usually called `Pixo-Nuke-main`:
+2. Open or create `init.py` in that `.nuke` folder and add these lines, keeping any existing startup code:
 
    ```python
    import nuke
-   nuke.pluginAddPath("./Pixo-Nuke")
+   nuke.pluginAddPath("./Pixo-Nuke-main")
    ```
+
+   If you used `git clone` instead of the ZIP, the folder is called `Pixo-Nuke`, so write `./Pixo-Nuke` instead.
 3. Restart Nuke. Pixo has its own **Pixo** menu, both in the Nodes toolbar on the left and in the menu bar at the top, with *Timer* and *Pulse*.
 
 The folder you point at must be the one that directly contains `menu.py` and the two `.gizmo` files, not a folder one level above it. ZIP extractors sometimes add an extra folder, so check.
@@ -97,7 +99,9 @@ They use a fake clock, local HTTP servers standing in for ComfyUI, scripts stand
 
 ## Not covered by the tests
 
-These need a real Nuke session: the *Read from* drop-down syntax, the meter panel inside Nuke's properties panel, Nuke's modified-script flag, and the Windows CPU and RAM readings.
+The automated tests run without Nuke. These were checked inside Nuke 16.0v5 on Windows 11 with an NVIDIA GPU: both gizmos load, the *Read from* drop-down offers Auto, Local and Server, a display update leaves the script unmodified, and the CPU, RAM, GPU, VRAM and temperature readings come back from this computer.
+
+Still to be checked by eye in a Nuke session: the meter panel drawn inside Nuke's Properties panel while monitoring.
 
 ## License
 
