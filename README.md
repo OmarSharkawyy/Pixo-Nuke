@@ -2,7 +2,7 @@
 
 A run timer and a live system monitor for ComfyUI, as two gizmos inside Nuke. See how long every ComfyUI job takes, and watch CPU, RAM, GPU, VRAM and temperature without leaving Nuke. No ComfyUI custom nodes and no extra Python packages are needed.
 
-Made by **Omar El Sharkawy** ([@OmarSharkawyy](https://github.com/OmarSharkawyy)).
+Made by **[Omar El Sharkawy](https://github.com/OmarSharkawyy)**.
 
 | Gizmo | What it does |
 | --- | --- |
