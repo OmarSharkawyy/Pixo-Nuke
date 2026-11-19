@@ -13,7 +13,7 @@ Gizmo {
  addUserKnob {1 server l "ComfyUI URL" t "Used when reading from the ComfyUI server, and to pick the source in Auto mode."}
  server http://127.0.0.1:8188
  addUserKnob {4 source l "Read from" t "Auto: read this computer when ComfyUI runs here, otherwise the ComfyUI server. Local: always this computer. Server: what ComfyUI reports (RAM and VRAM only)." M {Auto Local Server}}
- addUserKnob {3 gpu_index l "GPU number" t "Which NVIDIA GPU to read when the computer has more than one. 0 is the first."}
+ addUserKnob {3 gpu_index l "GPU number" t "Which graphics card to read when the computer has more than one. 0 is the first, 1 the second. With one card, leave it at 0. Run nvidia-smi -L in a terminal to see each card's number. A number past the last card reads the last card."}
  gpu_index 0
  addUserKnob {1 watch_token +INVISIBLE}
  addUserKnob {26 about l "" +STARTLINE T "<b>Pixo Pulse</b><br>Live CPU, RAM, GPU, VRAM and GPU temperature, with the last minute drawn beside each meter.<br>On this computer it needs no extra packages. GPU load, VRAM and temperature come from nvidia-smi, so they need an NVIDIA driver. Without it those rows show n/a, and VRAM is taken from ComfyUI when it is reachable.<br>For a ComfyUI server on another machine, set <i>Read from</i> to <i>Server</i> to see its RAM and VRAM."}

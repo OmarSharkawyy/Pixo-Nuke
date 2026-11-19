@@ -71,7 +71,7 @@ Meters turn amber at 60% (65 °C for temperature) and red at 85% (80 °C). Hover
 **Settings tab**
 
 - **Read from**: *Auto* reads this computer when the ComfyUI URL points at this machine and the ComfyUI server otherwise. *Local* and *Server* force one or the other.
-- **GPU number**: which NVIDIA GPU to read on a multi-GPU machine (0 is the first).
+- **GPU number**: which graphics card to read when the computer has more than one. 0 is the first card, 1 the second, and so on. With a single card, leave it at 0. To see each card's number, run `nvidia-smi -L` in a terminal; it lists them as `GPU 0`, `GPU 1`, and so on. A number higher than the last card reads the last card. With *Read from* set to *Server*, the number counts the cards in the list ComfyUI reports.
 
 What each source can report:
 
