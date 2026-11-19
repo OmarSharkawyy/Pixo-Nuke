@@ -6,7 +6,7 @@ Made by **[Omar El Sharkawy](https://github.com/OmarSharkawyy)**.
 
 | Gizmo | What it does |
 | --- | --- |
-| **Pixo Timer** | Times any job ComfyUI runs, including jobs started from the ComfyUI web page or other tools. |
+| **Pixo Timer** | Times any job ComfyUI runs, including jobs started from the ComfyUI web page or other tools, and estimates how long it has left. |
 | **Pixo Pulse** | Live CPU, RAM, GPU, VRAM and GPU temperature meters, each with the last minute drawn beside it. |
 
 ## Install
@@ -54,7 +54,7 @@ Requires Nuke with Python 3 (developed against Nuke 16). The meters use PySide, 
 2. Click **Start Watching**. Click **Stop** to end it.
 3. Run anything in ComfyUI.
 
-The panel shows `Idle`, `Running · 02:31` or `ComfyUI offline · retrying`, the running job's short id, the last finished run (`ok`, `failed`, `stopped`) and the runs and total time since you started. The node's label in the Node Graph shows the timer too.
+The panel shows `Idle`, `Running · 02:31` or `ComfyUI offline · retrying`, the running job's short id, an **Estimate** of the time left, the last finished run (`ok`, `failed`, `stopped`) and the runs and total time since you started. The node's label in the Node Graph shows the timer too.
 
 How the timing works:
 
@@ -63,7 +63,27 @@ How the timing works:
 - A job that was already running when you pressed Start Watching is shown as a lower bound (`≥02:31`) until it finishes.
 - If ComfyUI cannot be reached for a moment, a running timer keeps counting and shows `connection lost`.
 - A URL that answers with an error such as HTTP 404 is not treated as ComfyUI: watching stops with a message.
-- Time spent waiting in the queue is not included. The queue gives no per-node progress, so this shows time, not a percentage.
+- Time spent waiting in the queue is not included.
+
+### Estimate
+
+**Estimate** shows how long the running job has left, for example `~03:10 left (about 14:42) · sampler 1 of 2 · step 4/8 · from 3 earlier runs`, and the node's label shows `04:55 · ~03:10 left`. It works for any workflow, whoever started it, from two sources:
+
+- **The sampler steps.** Every sampler prints its progress to ComfyUI's console, such as `4/8 [00:40<00:40]`. Pixo reads that log, so it knows the current step and how long that sampler has left.
+- **Earlier runs of the same workflow.** Pixo remembers how long each finished run took and when each sampler started, and it also reads recent runs from ComfyUI's history. A run counts as the same workflow when it has the same nodes, models and size settings (width, height, frames, steps); a new prompt, seed or input clip does not change that.
+
+How accurate it is:
+
+| Situation | Estimate |
+| --- | --- |
+| The same workflow, at the same size, has finished while Pixo was watching | Whole job, adjusted to the speed of the steps running now. The most accurate case. |
+| It finished before, but only ComfyUI's history has it | Whole job, from the middle of the earlier times. |
+| First run of this workflow | Only the sampler that is running: `~00:40 left in this sampler`. The next run is estimated in full. |
+| The job was already running when you pressed Start Watching | No estimate for that job, since its start is unknown. |
+
+The first job after ComfyUI starts also loads the models, so it runs longer than later ones. Watching the steps corrects for that while the job runs. When a job outlasts every earlier run, the field says `Running longer than before`.
+
+Finished runs are kept in `pixo_timings.json` in your `.nuke` folder (the last 5 runs of up to 200 workflows). Delete it to start fresh, or set the `PIXO_TIMINGS_FILE` environment variable to keep it elsewhere. The sampler steps come from ComfyUI's `/internal/logs/raw` route; on a ComfyUI without it, the estimate uses earlier runs only.
 
 ## Pixo Pulse
 
@@ -104,6 +124,8 @@ They use a fake clock, local HTTP servers standing in for ComfyUI, scripts stand
 ## Checked in Nuke
 
 The automated tests run without Nuke. Everything they cannot reach was checked inside Nuke 16.0v5 on Windows 11 with an NVIDIA GPU: both gizmos load, the *Read from* drop-down offers Auto, Local and Server, a display update leaves the script unmodified, the CPU, RAM, GPU, VRAM and temperature readings come back from this computer, and the meter panel draws and updates inside Nuke's Properties panel while monitoring.
+
+The Timer's **Estimate** was checked against the real log and history of a ComfyUI running LTX-2.5 workflows, and the gizmo loads with the new field in Nuke 16.0v5. Watching it count down during a render in the Nuke panel is still to be checked by eye.
 
 ## License
 

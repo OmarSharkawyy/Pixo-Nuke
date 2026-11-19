@@ -11,10 +11,11 @@ Gizmo {
  addUserKnob {1 status l Status +DISABLED +STARTLINE}
  status "Not watching"
  addUserKnob {1 detail l Job +DISABLED +STARTLINE}
+ addUserKnob {1 estimate l Estimate +DISABLED +STARTLINE t "Time left for the running job. It follows the sampler steps in ComfyUI's log and the earlier runs of the same workflow, so it gets more accurate each time that workflow runs."}
  addUserKnob {1 last_run l "Last run" +DISABLED +STARTLINE}
  addUserKnob {1 session l Session +DISABLED +STARTLINE}
  addUserKnob {1 watch_token +INVISIBLE}
- addUserKnob {26 about l "" +STARTLINE T "<b>Pixo Timer</b><br>Shows how long the current ComfyUI run has been going, on this panel and on the node in the Node Graph.<br>It reads the server's queue and history, so it also times runs started outside Nuke.<br>Last run uses ComfyUI's own start and finish times. A run already going when you press Start Watching shows a lower bound (≥) until it finishes."}
+ addUserKnob {26 about l "" +STARTLINE T "<b>Pixo Timer</b><br>Shows how long the current ComfyUI run has been going, on this panel and on the node in the Node Graph.<br>It reads the server's queue and history, so it also times runs started outside Nuke.<br>Estimate shows the time left, from the sampler steps in ComfyUI's log and earlier runs of the same workflow.<br>Last run uses ComfyUI's own start and finish times. A run already going when you press Start Watching shows a lower bound (≥) until it finishes."}
 }
  Output {
   inputs 0

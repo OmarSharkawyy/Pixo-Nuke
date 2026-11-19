@@ -23,17 +23,22 @@ def fake_nuke():
 
 
 def main():
+    import tempfile
+    # Keep test runs out of the real timings file in ~/.nuke.
+    os.environ["PIXO_TIMINGS_FILE"] = str(Path(tempfile.mkdtemp(prefix="pixo-tests-")) / "timings.json")
+    import eta_checks
     import timer_checks as timer
     import monitor_checks as monitor_tests
 
     nuke = fake_nuke()
-    from pixo import client, monitor, monitor_ui, sysinfo, timer_ui, tracker
+    from pixo import client, eta, monitor, monitor_ui, sysinfo, timer_ui, tracker
     try:
         from pixo import widget
     except ImportError:
         widget = None
 
     steps = [("timer tracking", lambda: timer.tracker_test(tracker)),
+             ("time left estimate", lambda: eta_checks.eta_test(eta, tracker)),
              ("http client", lambda: timer.http_test(client)),
              ("timer node", lambda: timer.nuke_test(nuke, timer_ui, client)),
              ("system readings", lambda: monitor_tests.sysinfo_test(sysinfo)),

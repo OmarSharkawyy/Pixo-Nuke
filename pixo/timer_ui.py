@@ -4,7 +4,7 @@ import uuid
 
 import nuke
 
-from . import client
+from . import client, eta
 from .common import unmodified
 from .tracker import RunTracker
 
@@ -54,10 +54,12 @@ def stop(node):
     show(node, "Stopped", "", None, None, NODE_LABEL)
 
 
-def show(node, status, detail, last_run, session, label):
+def show(node, status, detail, last_run, session, label, estimate=""):
     with unmodified():
         node["status"].setValue(status)
         node["detail"].setValue(detail)
+        if node.knob("estimate") is not None:  # nodes saved before the Estimate field have none
+            node["estimate"].setValue(estimate)
         if last_run is not None:
             node["last_run"].setValue(last_run)
         if session is not None:
@@ -66,7 +68,7 @@ def show(node, status, detail, last_run, session, label):
 
 
 def watch(context, host, stopped):
-    tracker = RunTracker()
+    tracker = RunTracker(estimator=eta.Estimator())
 
     def fetch(route):
         return client.get_json(host, route)
@@ -103,7 +105,7 @@ def apply_view(context, view):
     node = owned_node(context)
     if node is not None and SHOWN.get(context[0]) != view:
         SHOWN[context[0]] = view
-        show(node, view.status, view.detail, view.last_run, view.session, view.label)
+        show(node, view.status, view.detail, view.last_run, view.session, view.label, view.estimate)
 
 
 def fail(context, message):

@@ -9,7 +9,7 @@ from . import client
 
 HISTORY_TRIES = 5  # polls to wait for a finished job to appear in /history
 
-View = namedtuple("View", "state status detail last_run session label")
+View = namedtuple("View", "state status detail last_run session label estimate", defaults=("",))
 
 
 def clock(seconds):
@@ -51,8 +51,9 @@ def history_result(entry):
 class RunTracker:
     """Call poll() every few seconds and view() whenever the display should refresh."""
 
-    def __init__(self, now=time.monotonic):
+    def __init__(self, now=time.monotonic, estimator=None):
         self.now = now
+        self.estimator = estimator  # optional eta.Estimator: time left for the running job
         self.online = None      # None until the first answer or failure
         self.waiting = 0
         self.current = None     # run being timed: id, started, partial
@@ -79,10 +80,17 @@ class RunTracker:
             self.current["ended"] = self.now()
             self.current["tries"] = 0
             self.finished.append(self.current)
+            if self.estimator is not None:
+                self.estimator.end(self.current["id"])
             self.current = None
         if running_id is not None and self.current is None:
             # Already running when we first looked: its true start is unknown.
             self.current = {"id": running_id, "started": self.now(), "partial": self._first_poll}
+            if self.estimator is not None:
+                prompt = running[0][2] if len(running[0]) > 2 else None
+                self.estimator.begin(fetch, running_id, prompt, self.current["partial"], self.now())
+        elif self.current is not None and self.estimator is not None:
+            self.estimator.update(fetch, self.now())
         self._first_poll = False
         self._resolve(fetch)
 
@@ -103,6 +111,8 @@ class RunTracker:
             else:
                 seconds, outcome, exact = run["ended"] - run["started"], "ended", False
             self.finished.remove(run)
+            if self.estimator is not None:
+                self.estimator.finish(run["id"], seconds, outcome, exact)
             self.last = (seconds, outcome, exact)
             self.runs += 1
             self.total += seconds
@@ -119,7 +129,9 @@ class RunTracker:
             elapsed = ("≥" if self.current["partial"] else "") + clock(self.now() - self.current["started"])
             status = f"Running · {elapsed}" + ("" if self.online is not False else " · connection lost")
             detail = " · ".join(part for part in (str(self.current["id"])[:8], waiting) if part)
-            return View("running", status, detail, last, session, elapsed)
+            estimate, short = self.estimator.describe(self.now()) if self.estimator is not None else ("", "")
+            label = f"{elapsed} · {short}" if short else elapsed
+            return View("running", status, detail, last, session, label, estimate)
         if self.online is False:
             return View("offline", "ComfyUI offline · retrying", "", last, session, "offline")
         if self.online is None:
