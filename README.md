@@ -48,6 +48,8 @@ Requires Nuke with Python 3 (developed against Nuke 16). The meters use PySide, 
 
 ## Pixo Timer
 
+![Pixo Timer panel in Nuke showing the ComfyUI URL, Status, Last run and Session](docs/images/timer.png)
+
 1. Create the node and check **ComfyUI URL** (default `http://127.0.0.1:8188`).
 2. Click **Start Watching**. Click **Stop** to end it.
 3. Run anything in ComfyUI.
@@ -64,6 +66,8 @@ How the timing works:
 - Time spent waiting in the queue is not included. The queue gives no per-node progress, so this shows time, not a percentage.
 
 ## Pixo Pulse
+
+![Pixo Pulse Monitor tab in Nuke with CPU, RAM, GPU, VRAM and temperature meters and their history](docs/images/pulse.png)
 
 1. Create the node, open the **Monitor** tab, and click **Start Monitoring**. Click **Stop** to end it.
 2. The node's label in the Node Graph shows a short readout such as `CPU 31 · GPU 17 · RAM 75`.
