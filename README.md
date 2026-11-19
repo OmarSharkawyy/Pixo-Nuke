@@ -97,11 +97,9 @@ python3 -I tests/smoke.py
 
 They use a fake clock, local HTTP servers standing in for ComfyUI, scripts standing in for `nvidia-smi`, and a stand-in for Nuke. The meter panel is drawn offscreen and its pixels are checked (skipped if PySide is not installed). Nuke, ComfyUI and a GPU are not needed.
 
-## Not covered by the tests
+## Checked in Nuke
 
-The automated tests run without Nuke. These were checked inside Nuke 16.0v5 on Windows 11 with an NVIDIA GPU: both gizmos load, the *Read from* drop-down offers Auto, Local and Server, a display update leaves the script unmodified, and the CPU, RAM, GPU, VRAM and temperature readings come back from this computer.
-
-Still to be checked by eye in a Nuke session: the meter panel drawn inside Nuke's Properties panel while monitoring.
+The automated tests run without Nuke. Everything they cannot reach was checked inside Nuke 16.0v5 on Windows 11 with an NVIDIA GPU: both gizmos load, the *Read from* drop-down offers Auto, Local and Server, a display update leaves the script unmodified, the CPU, RAM, GPU, VRAM and temperature readings come back from this computer, and the meter panel draws and updates inside Nuke's Properties panel while monitoring.
 
 ## License
 
